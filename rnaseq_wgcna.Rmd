@@ -1,0 +1,255 @@
+---
+title: "rnaseq_wgcna"
+output: html_document
+---
+
+## R Markdown
+
+
+```{r}
+# install.packages(c("matrixStats", "Hmisc", "splines", "foreach", "doParallel", "fastcluster", "dynamicTreeCut", "survival"))
+# 
+# install.packages("BiocManager")
+# BiocManager::install(c("GO.db", "preprocessCore", "impute"))
+# 
+# BiocManager::install("WGCNA")
+# 
+# # install.packages("./WGCNA tutorials/WGCNA", repos = NULL, lib=.Library, type = "source")
+```
+
+```{r}
+library(dplyr)
+library(WGCNA)
+```
+
+```{r}
+options(stringsAsFactors = FALSE);
+#Read in the data set
+# DATA <- "./ data"
+file_path1 <- "rnaseq_train_exp.csv"
+RNAseqData = read.csv(file.path(file_path1), header=TRUE, row.names="X");
+dim(RNAseqData);
+names(RNAseqData);
+#Each row is a sample and column to a gene
+head(RNAseqData)
+```
+
+```{r}
+gsg = goodSamplesGenes(RNAseqData, verbose = 3);
+gsg$allOK
+```
+
+```{r}
+sampleTree = hclust(dist(RNAseqData), method = "average");
+# Plot the sample tree: Open a graphic output window of size 12 by 9 inches
+# The user should change the dimensions if the window is too large or too small.
+sizeGrWindow(12,9)
+#pdf(file = "Plots/sampleClustering.pdf", width = 12, height = 9);
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5,
+cex.axis = 1.5, cex.main = 2)
+```
+
+
+```{r}
+# Plot a line to show the cut
+#abline(h = 30, col = "red");
+# Determine cluster under the line
+clust = cutreeStatic(sampleTree, cutHeight = 30, minSize = 10)
+table(clust)
+# clust 1 contains the samples we want to keep.
+keepSamples = (clust!=0)
+RNAseqData1 = RNAseqData[keepSamples, ]
+nGenes = ncol(RNAseqData1)
+nSamples = nrow(RNAseqData1)
+```
+
+```{r}
+dim(RNAseqData1)
+```
+
+```{r}
+PFSData = read.csv(file.path("pfs_train.csv"), header=TRUE, row.names="patient_id");
+#convert the censored values to negative
+index <- PFSData$progression == 0
+PFSData$time_to_progression_or_censor[index] = -abs(PFSData$time_to_progression_or_censor[index])
+
+dim(PFSData)
+names(PFSData)
+#Align RNAseq data with PFS data in terms of rows(keep the overlapping samples)
+PFSData1 = PFSData[rownames(RNAseqData),]
+PFSData1
+```
+
+```{r}
+save(RNAseqData, PFSData1, file = "RNAseq-dataInput.RData")
+```
+
+
+
+```{r}
+lnames = load(file = "RNAseq-dataInput.RData");
+lnames
+```
+
+
+```{r}
+# Choose a set of soft-thresholding powers
+powers = c(c(1:10), seq(from = 12, to=20, by=2))
+# Call the network topology analysis function
+sft = pickSoftThreshold(RNAseqData, powerVector = powers, verbose = 5)
+# Plot the results:
+sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+labels=powers,cex=cex1,col="red");
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.90,col="red")
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+```
+
+
+```{r}
+net = blockwiseModules(RNAseqData, power = 9,
+TOMType = "unsigned", minModuleSize = 2,
+reassignThreshold = 0, mergeCutHeight = 0.25,
+numericLabels = TRUE, pamRespectsDendro = FALSE,
+saveTOMs = TRUE,
+saveTOMFileBase = "RNAseqTOM",
+verbose = 3)
+```
+
+```{r}
+table(net$colors)
+```
+
+```{r}
+df <- as.data.frame(net$colors)
+colnames(df)[colnames(df)=="net$colors"] <- "module"
+df
+gene_name <- rownames(df)[df$module == 0]
+```
+
+```{r}
+#individual genes outside any module
+df2 <- RNAseqData[,gene_name]
+df2
+```
+
+```{r}
+#each row is a sample, each column is a module/group of genes
+net$MEs
+```
+
+
+```{r}
+#combine the two dataframes
+df3 <- merge(net$MEs, df2, by="row.names")
+df4 <- select (df3,-c(ME0))
+df4
+```
+
+
+```{r}
+df5 <- df4[,-1]
+rownames(df5) <- df4[,1]
+df5
+```
+
+
+```{r}
+# #convert dataframe df4 to csv file
+# write.csv(df5,'x_ge_train_new.csv')
+```
+
+
+
+-----------------------------------------------------------------
+Calculate the eigengenes of the modules for the test set.
+
+
+```{r}
+RNAseq_test <- read.csv(file.path("rnaseq_test_exp.csv"), header=TRUE, row.names="X");
+RNAseq_test
+```
+
+```{r}
+module1 <- rownames(df)[df$module == 1]
+module2 <- rownames(df)[df$module == 2]
+module3 <- rownames(df)[df$module == 3]
+module1
+```
+
+```{r}
+df_m1 <- RNAseq_test[,module1]
+df_m2 <- RNAseq_test[,module2]
+df_m3 <- RNAseq_test[,module3]
+```
+
+```{r}
+df_m1_t <- as.data.frame(t(df_m1))
+df_m2_t <- as.data.frame(t(df_m2))
+df_m3_t <- as.data.frame(t(df_m3))
+df_m1
+```
+
+
+```{r}
+eigengenes1 <- svd(df_m1_t)$v
+as.data.frame(eigengenes1)
+eigengenes2 <- svd(df_m2_t)$v
+as.data.frame(eigengenes2)
+eigengenes3 <- svd(df_m3_t)$v
+as.data.frame(eigengenes3)
+```
+
+
+```{r}
+ME1 <- rowMeans(as.data.frame(eigengenes1), na.rm = FALSE, dims = 1)
+df_ME1 <-as.data.frame(ME1)
+row.names(df_ME1) <- row.names(df_m1)
+ME2 <- rowMeans(as.data.frame(eigengenes2), na.rm = FALSE, dims = 1)
+df_ME2 <-as.data.frame(ME2)
+row.names(df_ME2) <- row.names(df_m1)
+ME3 <- rowMeans(as.data.frame(eigengenes3), na.rm = FALSE, dims = 1)
+df_ME3 <-as.data.frame(ME3)
+row.names(df_ME3) <- row.names(df_m1)
+```
+
+```{r}
+#create a dataframe with 3 different modules as columns
+xy <- merge(df_ME2, df_ME1, by="row.names")
+xy1 <- xy[,-1]
+rownames(xy1) <- xy[,1]
+xy1
+
+xyy <- merge(xy1, df_ME3, by="row.names")
+xyy1 <- xyy[,-1]
+rownames(xyy1) <- xyy[,1]
+xyy1
+```
+
+```{r}
+#finalize the dataframe by adding the outside-module genes to the columns
+gene_df <- RNAseq_test[,gene_name]
+merge_df <- merge(xyy1, gene_df, by="row.names")
+merge_df1 <- merge_df[,-1]
+rownames(merge_df1) <- merge_df[,1]
+merge_df1
+```
+
+```{r}
+# #save merge_df1 as a csv file
+# write.csv(merge_df1,'x_ge_test_new.csv')
+```
+

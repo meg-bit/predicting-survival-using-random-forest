@@ -5,7 +5,6 @@ output: html_document
 
 ## R Markdown
 
-
 ```{r}
 # install.packages(c("matrixStats", "Hmisc", "splines", "foreach", "doParallel", "fastcluster", "dynamicTreeCut", "survival"))
 # 
@@ -51,7 +50,6 @@ plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="",
 cex.axis = 1.5, cex.main = 2)
 ```
 
-
 ```{r}
 # Plot a line to show the cut
 #abline(h = 30, col = "red");
@@ -86,13 +84,10 @@ PFSData1
 save(RNAseqData, PFSData1, file = "RNAseq-dataInput.RData")
 ```
 
-
-
 ```{r}
 lnames = load(file = "RNAseq-dataInput.RData");
 lnames
 ```
-
 
 ```{r}
 # Choose a set of soft-thresholding powers
@@ -117,7 +112,6 @@ xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
 main = paste("Mean connectivity"))
 text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
 ```
-
 
 ```{r}
 net = blockwiseModules(RNAseqData, power = 9,
@@ -151,7 +145,6 @@ df2
 net$MEs
 ```
 
-
 ```{r}
 #combine the two dataframes
 df3 <- merge(net$MEs, df2, by="row.names")
@@ -159,25 +152,18 @@ df4 <- select (df3,-c(ME0))
 df4
 ```
 
-
 ```{r}
 df5 <- df4[,-1]
 rownames(df5) <- df4[,1]
 df5
 ```
 
-
 ```{r}
 # #convert dataframe df4 to csv file
 # write.csv(df5,'x_ge_train_new.csv')
 ```
 
-
-
------------------------------------------------------------------
-Calculate the eigengenes of the modules for the test set.
-
-
+##Calculate the eigengenes of the modules for the test set.
 ```{r}
 RNAseq_test <- read.csv(file.path("rnaseq_test_exp.csv"), header=TRUE, row.names="X");
 RNAseq_test
@@ -203,7 +189,6 @@ df_m3_t <- as.data.frame(t(df_m3))
 df_m1
 ```
 
-
 ```{r}
 eigengenes1 <- svd(df_m1_t)$v
 as.data.frame(eigengenes1)
@@ -212,7 +197,6 @@ as.data.frame(eigengenes2)
 eigengenes3 <- svd(df_m3_t)$v
 as.data.frame(eigengenes3)
 ```
-
 
 ```{r}
 ME1 <- rowMeans(as.data.frame(eigengenes1), na.rm = FALSE, dims = 1)
